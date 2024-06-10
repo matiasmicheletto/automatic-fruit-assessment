@@ -5,6 +5,7 @@ import random
 import numpy as np
 import csv
 
+
 # Function to generate a random circle or ellipse
 def draw_random_shape(image):
     height, width = image.shape[:2]

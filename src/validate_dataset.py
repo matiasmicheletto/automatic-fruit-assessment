@@ -1,52 +1,8 @@
 import os
 import sys
-import cv2
 import csv
-import matplotlib.pyplot as plt
 
 
-def measure_shapes_area(image_path):
-    # Load the image
-    image = cv2.imread(image_path)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Threshold the image to get binary image
-    _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-    
-    # Find contours
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Calculate areas
-    areas = [cv2.contourArea(contour) for contour in contours]
-    
-    return image, contours, areas
-
-
-def draw_contours(image, contours, areas, file_path, save=False):
-    # Draw contours on the image
-    cv2.drawContours(image, contours, -1, (0, 255, 0), 2)
-    
-    # Display the image with contours using matplotlib
-    plt.figure(figsize=(5, 5))
-    plt.title('Contours on Image')
-    plt.axis('off')
-    # Make figure fit the image
-    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    
-    # Annotate the image with area sizes
-    for i, contour in enumerate(contours):
-        x, y, w, h = cv2.boundingRect(contour)
-        plt.text(x, y - 10, f'Area: {areas[i]:.2f}', color='red', fontsize=12, backgroundcolor='white')
-    
-    # Save image to file
-    if file_path:
-        plt.savefig(file_path)
-    else:
-        plt.show()
-
-
-# Read images from dataset, process images and save results to validation directory
 # Compare training data with validation data
 if __name__ == "__main__":
     # Get the arguments from the command line
@@ -57,29 +13,31 @@ if __name__ == "__main__":
 
     dataset_dir = sys.argv[1]
     validation_dir = sys.argv[2]
-    areas_file = os.path.join(validation_dir, f'computed_areas.txt')
+    
+    areas_file = os.path.join(dataset_dir, f'areas.txt')
+    computed_areas_file = os.path.join(validation_dir, f'computed_areas.txt')
 
-    # Create the output directory if it does not exist
-    os.makedirs(validation_dir, exist_ok=True)
-    for file_name in os.listdir(validation_dir):
-        file_path = os.path.join(validation_dir, file_name)
-        os.remove(file_path)
+    with open(areas_file, 'r') as f:
+        reader = csv.reader(f)
+        dataset_areas = [list(map(float, row)) for row in reader]
+        with open(computed_areas_file, 'r') as f:
+            reader = csv.reader(f)
+            validation_areas = [list(map(float, row)) for row in reader]
+            
+            detected_mismatch = 0
+            errors = []
+            for dataset, validation in zip(dataset_areas, validation_areas):
+                if len(dataset) != len(validation):
+                    detected_mismatch += 1
+                else:
+                    diff = [abs(d - v) for d, v in zip(dataset, validation)]
+                    error = sum(diff) / len(dataset)
+                    errors.append(error)
 
-    size = len(os.listdir(dataset_dir))
-    for i in range(size):
-        
-        # Process image and save results values
-        image_path = os.path.join(dataset_dir, f'image_{i:03d}.png')
-        if not os.path.isfile(image_path):
-            continue
-        image, contours, areas = measure_shapes_area(image_path)
-        areas.sort()
-        with open(areas_file, 'a') as f:
-            writer = csv.writer(f)
-            writer.writerow(areas)    
-        
-        # Save image with contours
-        result_path = os.path.join(validation_dir, f'result_{i:03d}.png')
-        draw_contours(image, contours, areas, result_path)
-        
-        
+            avg_error = sum(errors) / len(errors)
+            std_dev = (sum([(error - avg_error) ** 2 for error in errors]) / len(errors)) ** 0.5
+
+            print(f'Detected mismatch: {detected_mismatch} out of {len(dataset_areas)} images')
+            #print(f'Average error: {avg_error}')
+            print(f'Relative error: {avg_error / sum(errors)}')
+            print(f'Standard deviation: {std_dev}')
